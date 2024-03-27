@@ -49,7 +49,7 @@
             'coordinates':[114.61225032806398,30.45973503762294]
         }
     };
-    var geojsonLayer=new L.GeoJSON.AJAX("geoJSON/CUG_WGS84.json")
+    var geojsonLayer=new L.GeoJSON.AJAX("CUG_WGS84.json")
     L.geoJSON(geojsonFeature).addTo(myMap);
     geojsonLayer.addTo(myMap);
     var fileInput=document.getElementById("fileID");
