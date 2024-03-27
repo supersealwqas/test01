@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>leaflet开发环境准备(OSM)</title>
+    <link rel='stylesheet' href="CSS/leaflet.css">
+    <script src="JS/leaflet.js"></script>
+    <script src="JS/leaflet.ChineseTmsProviders.js"></script>
+    <script src="JS/leaflet.ajax.js"></script>
+    <title>Document</title>
+</head>
+<body>
+    <input type="file" name="JsonName" id="fileID"/>
+    <div id="mapid" style="width: 600px;height: 400px;"></div>
+    <style>
+        #fileID{
+            position: absolute;
+            top: 20px;
+            left: 60px;
+            cursor: pointer;
+            z-index: 500;
+        }
+    </style>
+</body>
+<script>
+    var myMap=L.map('mapid',{
+        center:[30.55,114.3],
+        zoom:10
+    });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+        "attribution": "Data by \u0026copy; \u003ca target=\"_blank\" href=\"http://openstreetmap.org\"\u003eOpenStreetMap\u003c/a\u003e, under \u003ca target=\"_blank\" href=\"http://www.openstreetmap.org/copyright\"\u003eODbL\u003c/a\u003e.",
+        "detectRetina": false, 
+        "maxNativeZoom": 18, 
+        "maxZoom": 18,
+        "minZoom": 0,
+        "noWrap": false,
+        "opacity": 1,
+        "subdomains": "abc", 
+        "tms": false
+    }).addTo(myMap);
+    var geojsonFeature={
+        'type':'Feature',
+        'properties0':{
+            "名称":"中国地质大学（武汉）未来城校区",
+        },
+        'geometry':{
+            'type':'Point',
+            'coordinates':[114.61225032806398,30.45973503762294]
+        }
+    };
+    var geojsonLayer=new L.GeoJSON.AJAX("geoJSON/CUG_WGS84.json")
+    L.geoJSON(geojsonFeature).addTo(myMap);
+    geojsonLayer.addTo(myMap);
+    var fileInput=document.getElementById("fileID");
+    fileInput.onchange=function(e){
+        var files=e.target.files;
+        if(files && files.length>0){
+        
+        var reader=new FileReader();
+        reader.readAsText(files[0],"UTF-8");
+        reader.onload=function(evt){
+            var fileString=evt.target.result;
+            var jsonFile=JSON.parse(fileString);
+            L.geoJSON(jsonFile).addTo(myMap);
+        };
+        reader.onerror=function(evt){
+            console.error("GeoJSON数据读取失败！错误代码："+event.target.error.code);
+        };
+    }
+    }
+    
+</script>
+</html>
