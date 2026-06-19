@@ -1,86 +1,628 @@
-<!DOCTYPE html>  
-<html>  
-<head>  
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />  
-    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />  
-    <style type="text/css">  
-        body, html,#allmap {width: 100%;height: 100%;overflow: hidden;margin:0;font-family:"微软雅黑";}  
-        #panel{  
-            position:absolute;  
-            left:5px;  
-            top:5px;  
-        }  
-        #result{  
-            background: #fff;  
-            padding:5px;  
-        }  
-    </style>  
-    <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>  
-    <script type="text/javascript" src="http://api.map.baidu.com/api?v=2.0&ak=1XjLLEhZhQNUzd93EjU5nOGQ"></script>  
-    <title>添加行政区划</title>  
-</head>  
-<body>  
-    <div id="allmap"></div>  
-    <div id="panel">  
-        <div>  
-        <input type="text" id="keyword" value="石家庄市"/>  
-        <input type="button" value="查看范围" id="commitBtn"/>  
-        边界经纬度坐标  
-        <textarea id="pathStr"></textarea>  
-        边界墨卡托坐标  
-        <textarea id="pathMc"></textarea>  
-        </div>  
-        <div id="result">  
-        </div>  
-    </div>  
-</body>  
-</html>  
-<script type="text/javascript">  
-    // 百度地图API功能  
-    var map = new BMap.Map("allmap");  
-    map.centerAndZoom(new BMap.Point(116.403765, 39.914850), 5);  
-    map.enableScrollWheelZoom();  
-    var mercatorProjection = map.getMapType().getProjection();  
-    $("#commitBtn").bind('click', function(){  
-        getBoundary($("#keyword").val());  
-    });  
-    function getBoundary(city){         
-        var bdary = new BMap.Boundary();  
-        bdary.get(city, function(rs){       //获取行政区域  
-            map.clearOverlays();        //清除地图覆盖物         
-            var count = rs.boundaries.length; //行政区域的点有多少个  
-            if (count === 0) {  
-                alert('未能获取当前输入行政区域');  
-                return ;  
-            }  
-            var pointArray = [];  
-            for (var i = 0; i < count; i++) {  
-                var ply = new BMap.Polygon(rs.boundaries[i], {strokeWeight: 2, strokeColor: "#ff0000"}); //建立多边形覆盖物  
-                map.addOverlay(ply);  //添加覆盖物  
-                pointArray = pointArray.concat(ply.getPath());  
-            }      
-            var pathStr = "";  
-            var pathMc = "";  
-            for (var i = 0; i < pointArray.length; i++) {  
- 
-                var mc = mercatorProjection.lngLatToPoint(pointArray[i]);  
-                pathStr += pointArray[i].lng + "," + pointArray[i].lat + ";";  
-                pathMc += mc.x + "," + mc.y + ";";  
-            }  
-            $('#pathStr').html(pathStr);  
-            $('#pathMc').html(pathMc);  
-            var ply = new BMap.Polygon(pointArray , {strokeWeight: 2, strokeColor: "#ff0000"}); //建立多边形覆盖物  
-            var bounds = ply.getBounds();  
-            var ne = bounds.getNorthEast();  
-            var sw = bounds.getSouthWest();  
-            var neMc = mercatorProjection.lngLatToPoint(ne);  
-            var swMc = mercatorProjection.lngLatToPoint(sw);  
-            var str = "经纬度:左下角,右上角：" + sw.lng + "," + sw.lat + ";" + ne.lng + "," + ne.lat  
-                                                 + "<br/>墨卡托坐标:左下角,右上角：" + swMc.x + "," + swMc.y + ";" + neMc.x + "," + neMc.y;  
-            $('#result').html(str);  
-            console.log(bounds);  
-            map.setViewport(pointArray);    //调整视野                   
-        });     
-    }  
-    //getBoundary('北京');  
-</script>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>
+    <title>行政区划查询</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body, html, #allmap {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        #panel {
+            position: absolute;
+            left: 16px;
+            top: 16px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            width: 320px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        #panel:hover {
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-title::before {
+            content: "";
+            display: inline-block;
+            width: 4px;
+            height: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        #keyword {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        #keyword:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        #commitBtn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        #commitBtn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        #commitBtn:active {
+            transform: translateY(0);
+        }
+
+        #commitBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .stat-item {
+            flex: 1;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .result-section {
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .copy-btn {
+            padding: 2px 8px;
+            font-size: 10px;
+            background: #e9ecef;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #495057;
+            transition: all 0.2s ease;
+        }
+
+        .copy-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        textarea {
+            width: 100%;
+            height: 50px;
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 11px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            resize: vertical;
+            background: #fafafa;
+            transition: all 0.3s ease;
+        }
+
+        textarea:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        #result {
+            padding: 12px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #333;
+            min-height: 40px;
+        }
+
+        .loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #667eea;
+        }
+
+        .loading-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e0e0e0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .success-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #28a745;
+            color: white;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .error-message {
+            color: #dc3545;
+            padding: 10px;
+            background: #fff5f5;
+            border-radius: 6px;
+            border-left: 3px solid #dc3545;
+        }
+
+        .history-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .history-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .history-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .history-tag {
+            padding: 4px 10px;
+            background: #e9ecef;
+            border-radius: 12px;
+            font-size: 11px;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .history-tag:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .leaflet-control-attribution {
+            font-size: 10px !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="allmap"></div>
+    <div id="panel">
+        <div class="panel-title">行政区划查询</div>
+        
+        <div class="search-box">
+            <input type="text" id="keyword" placeholder="输入地名，如：黄州区" value="黄州区"/>
+            <button id="commitBtn">查询</button>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value" id="loadTime">-</div>
+                <div class="stat-label">加载时间(ms)</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="requestCount">-</div>
+                <div class="stat-label">请求数</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="cacheCount">0</div>
+                <div class="stat-label">缓存数</div>
+            </div>
+        </div>
+
+        <div id="result">输入地名后点击查询按钮</div>
+
+        <div class="result-section" style="margin-top: 12px;">
+            <div class="section-title">
+                边界经纬度坐标
+                <button class="copy-btn" onclick="copyToClipboard('pathStr')">复制</button>
+            </div>
+            <textarea id="pathStr" readonly></textarea>
+        </div>
+
+        <div class="result-section">
+            <div class="section-title">
+                边界墨卡托坐标
+                <button class="copy-btn" onclick="copyToClipboard('pathMc')">复制</button>
+            </div>
+            <textarea id="pathMc" readonly></textarea>
+        </div>
+
+        <div class="history-section" id="historySection" style="display: none;">
+            <div class="history-title">查询历史</div>
+            <div class="history-list" id="historyList"></div>
+        </div>
+    </div>
+
+    <script>
+        var map = L.map('allmap', {
+            center: [39.914850, 116.403765],
+            zoom: 5,
+            scrollWheelZoom: true
+        });
+
+        L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+            attribution: '&copy; 高德地图',
+            subdomains: ['1','2','3','4'],
+            maxZoom: 18
+        }).addTo(map);
+
+        var currentLayer = null;
+        var cache = {};
+        var cacheCount = 0;
+        var requestCount = 0;
+        var searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+
+        // 从localStorage加载缓存
+        function loadCache() {
+            try {
+                var saved = localStorage.getItem('geoCache');
+                if (saved) {
+                    cache = JSON.parse(saved);
+                    updateCacheCount();
+                }
+            } catch(e) {}
+        }
+
+        function saveCache() {
+            try {
+                localStorage.setItem('geoCache', JSON.stringify(cache));
+            } catch(e) {}
+        }
+
+        function updateCacheCount() {
+            cacheCount = Object.keys(cache).length;
+            document.getElementById('cacheCount').textContent = cacheCount;
+        }
+
+        function updateHistory() {
+            if (searchHistory.length === 0) {
+                document.getElementById('historySection').style.display = 'none';
+                return;
+            }
+            document.getElementById('historySection').style.display = 'block';
+            var list = document.getElementById('historyList');
+            list.innerHTML = '';
+            searchHistory.slice(-10).reverse().forEach(function(name) {
+                var tag = document.createElement('span');
+                tag.className = 'history-tag';
+                tag.textContent = name;
+                tag.onclick = function() {
+                    document.getElementById('keyword').value = name;
+                    getBoundary(name);
+                };
+                list.appendChild(tag);
+            });
+        }
+
+        function addToHistory(name) {
+            var index = searchHistory.indexOf(name);
+            if (index > -1) searchHistory.splice(index, 1);
+            searchHistory.push(name);
+            if (searchHistory.length > 20) searchHistory.shift();
+            localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+            updateHistory();
+        }
+
+        function copyToClipboard(id) {
+            var textarea = document.getElementById(id);
+            textarea.select();
+            document.execCommand('copy');
+            
+            var btn = textarea.previousElementSibling.querySelector('.copy-btn');
+            var originalText = btn.textContent;
+            btn.textContent = '已复制';
+            btn.style.background = '#28a745';
+            btn.style.color = 'white';
+            setTimeout(function() {
+                btn.textContent = originalText;
+                btn.style.background = '';
+                btn.style.color = '';
+            }, 1500);
+        }
+
+        document.getElementById('commitBtn').onclick = function() {
+            var keyword = document.getElementById('keyword').value.trim();
+            if (keyword) getBoundary(keyword);
+        };
+
+        document.getElementById('keyword').onkeypress = function(e) {
+            if (e.key === 'Enter') {
+                var keyword = this.value.trim();
+                if (keyword) getBoundary(keyword);
+            }
+        };
+
+        function fetchJSON(url) {
+            requestCount++;
+            document.getElementById('requestCount').textContent = requestCount;
+            
+            if (cache[url]) {
+                return Promise.resolve(cache[url]);
+            }
+            
+            return fetch(url).then(function(res) {
+                if (!res.ok) {
+                    if (res.status === 403) {
+                        throw new Error('API访问受限，请稍后再试');
+                    }
+                    throw new Error('HTTP ' + res.status);
+                }
+                return res.json();
+            }).then(function(data) {
+                cache[url] = data;
+                updateCacheCount();
+                saveCache();
+                return data;
+            });
+        }
+
+        function getBoundary(city) {
+            if (currentLayer) {
+                map.removeLayer(currentLayer);
+            }
+            
+            var startTime = performance.now();
+            requestCount = 0;
+            document.getElementById('requestCount').textContent = '0';
+            document.getElementById('loadTime').textContent = '...';
+            
+            var btn = document.getElementById('commitBtn');
+            btn.disabled = true;
+            btn.textContent = '查询中...';
+            
+            document.getElementById('result').innerHTML = '<div class="loading"><div class="loading-spinner"></div>正在搜索 ' + city + '...</div>';
+
+            // 使用阿里云DataV API - 优化搜索策略
+            // 首先检查缓存中是否有匹配的区域
+            var cachedAdcode = findInCache(city);
+            if (cachedAdcode) {
+                loadBoundary(cachedAdcode, city, startTime);
+                return;
+            }
+
+            // 获取国家级数据并搜索
+            fetchJSON('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')
+                .then(function(data) {
+                    if (!data || !data.features) throw new Error('获取数据失败');
+                    
+                    // 第一层：检查省级
+                    for (var i = 0; i < data.features.length; i++) {
+                        if (data.features[i].properties.name === city) {
+                            return String(data.features[i].properties.adcode);
+                        }
+                    }
+                    
+                    // 第二层：并行搜索所有市级
+                    var provinceCodes = data.features.map(function(f) { return f.properties.adcode; });
+                    return searchInLevel(provinceCodes, city);
+                })
+                .then(function(adcode) {
+                    if (!adcode) {
+                        document.getElementById('result').innerHTML = '<div class="error-message">未找到 "' + city + '" 的行政区域数据</div>';
+                        btn.disabled = false;
+                        btn.textContent = '查询';
+                        return;
+                    }
+                    loadBoundary(adcode, city, startTime);
+                })
+                .catch(function(err) {
+                    var errorMsg = err.message || '未知错误';
+                    if (errorMsg.includes('API访问受限')) {
+                        document.getElementById('result').innerHTML = '<div class="error-message">⚠️ ' + errorMsg + '<br><small>由于请求过于频繁，API暂时被限流，请等待1-2分钟后重试</small></div>';
+                    } else {
+                        document.getElementById('result').innerHTML = '<div class="error-message">获取边界数据失败: ' + errorMsg + '</div>';
+                    }
+                    btn.disabled = false;
+                    btn.textContent = '查询';
+                });
+        }
+
+        function findInCache(name) {
+            // 在缓存中查找匹配的区域名称
+            for (var url in cache) {
+                var data = cache[url];
+                if (data && data.features) {
+                    for (var i = 0; i < data.features.length; i++) {
+                        if (data.features[i].properties && data.features[i].properties.name === name) {
+                            return String(data.features[i].properties.adcode);
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        function searchInLevel(codes, name, depth) {
+            depth = depth || 0;
+            if (depth > 3) return Promise.resolve(null); // 限制搜索深度
+            
+            var promises = codes.map(function(code) {
+                return fetchJSON('https://geo.datav.aliyun.com/areas_v3/bound/' + code + '_full.json').catch(function() {
+                    return null; // 忽略404错误
+                });
+            });
+            
+            return Promise.all(promises).then(function(results) {
+                var nextCodes = [];
+                for (var i = 0; i < results.length; i++) {
+                    if (!results[i] || !results[i].features) continue;
+                    for (var j = 0; j < results[i].features.length; j++) {
+                        if (results[i].features[j].properties.name === name) {
+                            return String(results[i].features[j].properties.adcode);
+                        }
+                        nextCodes.push(results[i].features[j].properties.adcode);
+                    }
+                }
+                // 如果当前层没找到，继续下一层
+                if (nextCodes.length > 0 && depth < 3) {
+                    return searchInLevel(nextCodes, name, depth + 1);
+                }
+                return null;
+            });
+        }
+
+        function loadBoundary(adcode, city, startTime) {
+            fetchJSON('https://geo.datav.aliyun.com/areas_v3/bound/' + adcode + '.json')
+                .then(function(data) {
+                    if (!data) throw new Error('获取边界数据失败');
+                    
+                    var endTime = performance.now();
+                    var duration = Math.round(endTime - startTime);
+                    document.getElementById('loadTime').textContent = duration;
+
+                    currentLayer = L.geoJSON(data, {
+                        style: {
+                            weight: 3,
+                            color: '#667eea',
+                            fillOpacity: 0.15,
+                            fillColor: '#667eea'
+                        }
+                    }).addTo(map);
+
+                    var pathStr = '';
+                    var pathMc = '';
+                    var coords = [];
+                    var geometry = data.features ? data.features[0].geometry : data.geometry;
+                    if (geometry.type === 'Polygon') {
+                        coords = geometry.coordinates[0];
+                    } else if (geometry.type === 'MultiPolygon') {
+                        coords = geometry.coordinates[0][0];
+                    }
+                    for (var i = 0; i < coords.length; i++) {
+                        var lng = coords[i][0];
+                        var lat = coords[i][1];
+                        pathStr += lng + ',' + lat + ';';
+                        var mc = lngLatToMercator(lng, lat);
+                        pathMc += mc.x + ',' + mc.y + ';';
+                    }
+                    document.getElementById('pathStr').value = pathStr;
+                    document.getElementById('pathMc').value = pathMc;
+
+                    var bounds = currentLayer.getBounds();
+                    var sw = bounds.getSouthWest();
+                    var ne = bounds.getNorthEast();
+                    var swMc = lngLatToMercator(sw.lng, sw.lat);
+                    var neMc = lngLatToMercator(ne.lng, ne.lat);
+                    
+                    var str = '<strong>' + city + '</strong><span class="success-badge">查询成功</span><br><br>'
+                        + '<strong>经纬度范围:</strong><br>'
+                        + '左下角: ' + sw.lng.toFixed(6) + ', ' + sw.lat.toFixed(6) + '<br>'
+                        + '右上角: ' + ne.lng.toFixed(6) + ', ' + ne.lat.toFixed(6) + '<br><br>'
+                        + '<strong>墨卡托坐标:</strong><br>'
+                        + '左下角: ' + swMc.x + ', ' + swMc.y + '<br>'
+                        + '右上角: ' + neMc.x + ', ' + neMc.y;
+                    document.getElementById('result').innerHTML = str;
+
+                    map.fitBounds(currentLayer.getBounds());
+                    addToHistory(city);
+                    
+                    document.getElementById('commitBtn').disabled = false;
+                    document.getElementById('commitBtn').textContent = '查询';
+                })
+                .catch(function(err) {
+                    document.getElementById('result').innerHTML = '<div class="error-message">获取边界数据失败: ' + err.message + '</div>';
+                    document.getElementById('commitBtn').disabled = false;
+                    document.getElementById('commitBtn').textContent = '查询';
+                });
+        }
+
+        function lngLatToMercator(lng, lat) {
+            var x = lng * 20037508.34 / 180;
+            var y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+            y = y * 20037508.34 / 180;
+            return {x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100};
+        }
+
+        // 初始化
+        loadCache();
+        updateHistory();
+    </script>
+</body>
+</html>

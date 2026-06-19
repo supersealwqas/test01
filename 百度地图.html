@@ -1,86 +1,179 @@
-<!DOCTYPE html>  
-<html>  
-<head>  
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />  
-    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />  
-    <style type="text/css">  
-        body, html,#allmap {width: 100%;height: 100%;overflow: hidden;margin:0;font-family:"微软雅黑";}  
-        #panel{  
-            position:absolute;  
-            left:5px;  
-            top:5px;  
-        }  
-        #result{  
-            background: #fff;  
-            padding:5px;  
-        }  
-    </style>  
-    <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>  
-    <script type="text/javascript" src="http://api.map.baidu.com/api?v=2.0&ak=1XjLLEhZhQNUzd93EjU5nOGQ"></script>  
-    <title>添加行政区划</title>  
-</head>  
-<body>  
-    <div id="allmap"></div>  
-    <div id="panel">  
-        <div>  
-        <input type="text" id="keyword" value="石家庄市"/>  
-        <input type="button" value="查看范围" id="commitBtn"/>  
-        边界经纬度坐标  
-        <textarea id="pathStr"></textarea>  
-        边界墨卡托坐标  
-        <textarea id="pathMc"></textarea>  
-        </div>  
-        <div id="result">  
-        </div>  
-    </div>  
-</body>  
-</html>  
-<script type="text/javascript">  
-    // 百度地图API功能  
-    var map = new BMap.Map("allmap");  
-    map.centerAndZoom(new BMap.Point(116.403765, 39.914850), 5);  
-    map.enableScrollWheelZoom();  
-    var mercatorProjection = map.getMapType().getProjection();  
-    $("#commitBtn").bind('click', function(){  
-        getBoundary($("#keyword").val());  
-    });  
-    function getBoundary(city){         
-        var bdary = new BMap.Boundary();  
-        bdary.get(city, function(rs){       //获取行政区域  
-            map.clearOverlays();        //清除地图覆盖物         
-            var count = rs.boundaries.length; //行政区域的点有多少个  
-            if (count === 0) {  
-                alert('未能获取当前输入行政区域');  
-                return ;  
-            }  
-            var pointArray = [];  
-            for (var i = 0; i < count; i++) {  
-                var ply = new BMap.Polygon(rs.boundaries[i], {strokeWeight: 2, strokeColor: "#ff0000"}); //建立多边形覆盖物  
-                map.addOverlay(ply);  //添加覆盖物  
-                pointArray = pointArray.concat(ply.getPath());  
-            }      
-            var pathStr = "";  
-            var pathMc = "";  
-            for (var i = 0; i < pointArray.length; i++) {  
- 
-                var mc = mercatorProjection.lngLatToPoint(pointArray[i]);  
-                pathStr += pointArray[i].lng + "," + pointArray[i].lat + ";";  
-                pathMc += mc.x + "," + mc.y + ";";  
-            }  
-            $('#pathStr').html(pathStr);  
-            $('#pathMc').html(pathMc);  
-            var ply = new BMap.Polygon(pointArray , {strokeWeight: 2, strokeColor: "#ff0000"}); //建立多边形覆盖物  
-            var bounds = ply.getBounds();  
-            var ne = bounds.getNorthEast();  
-            var sw = bounds.getSouthWest();  
-            var neMc = mercatorProjection.lngLatToPoint(ne);  
-            var swMc = mercatorProjection.lngLatToPoint(sw);  
-            var str = "经纬度:左下角,右上角：" + sw.lng + "," + sw.lat + ";" + ne.lng + "," + ne.lat  
-                                                 + "<br/>墨卡托坐标:左下角,右上角：" + swMc.x + "," + swMc.y + ";" + neMc.x + "," + neMc.y;  
-            $('#result').html(str);  
-            console.log(bounds);  
-            map.setViewport(pointArray);    //调整视野                   
-        });     
-    }  
-    //getBoundary('北京');  
-</script>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>
+    <title>添加行政区划</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body, html, #allmap {width: 100%; height: 100%; overflow: hidden; margin: 0; font-family: "微软雅黑";}
+        #panel {
+            position: absolute;
+            left: 5px;
+            top: 5px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.9);
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+        }
+        #result {
+            background: #fff;
+            padding: 5px;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+        textarea {width: 100%; height: 40px; font-size: 11px;}
+    </style>
+</head>
+<body>
+    <div id="allmap"></div>
+    <div id="panel">
+        <div>
+            <input type="text" id="keyword" value="石家庄市"/>
+            <input type="button" value="查看范围" id="commitBtn"/>
+            <div style="margin-top:5px;font-size:12px;">边界经纬度坐标</div>
+            <textarea id="pathStr"></textarea>
+            <div style="font-size:12px;">边界墨卡托坐标</div>
+            <textarea id="pathMc"></textarea>
+        </div>
+        <div id="result"></div>
+    </div>
+    <script>
+        var map = L.map('allmap', {
+            center: [39.914850, 116.403765],
+            zoom: 5,
+            scrollWheelZoom: true
+        });
+
+        L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+            attribution: '&copy; 高德地图',
+            subdomains: ['1','2','3','4'],
+            maxZoom: 18
+        }).addTo(map);
+
+        var currentLayer = null;
+        var cache = {};
+
+        document.getElementById('commitBtn').onclick = function() {
+            getBoundary(document.getElementById('keyword').value.trim());
+        };
+
+        function fetchJSON(url) {
+            if (cache[url]) return Promise.resolve(cache[url]);
+            return fetch(url).then(function(res) {
+                if (!res.ok) return null;
+                return res.json();
+            }).then(function(data) {
+                if (data) cache[url] = data;
+                return data;
+            }).catch(function() { return null; });
+        }
+
+        function findInFeatures(features, name) {
+            for (var i = 0; i < features.length; i++) {
+                if (features[i].properties.name === name) {
+                    return String(features[i].properties.adcode);
+                }
+            }
+            return null;
+        }
+
+        function searchLevel(adcodes, name) {
+            var promises = adcodes.map(function(code) {
+                return fetchJSON('https://geo.datav.aliyun.com/areas_v3/bound/' + code + '_full.json');
+            });
+            return Promise.all(promises).then(function(results) {
+                var nextCodes = [];
+                for (var i = 0; i < results.length; i++) {
+                    if (!results[i] || !results[i].features) continue;
+                    var found = findInFeatures(results[i].features, name);
+                    if (found) return {adcode: found, done: true};
+                    for (var j = 0; j < results[i].features.length; j++) {
+                        nextCodes.push(String(results[i].features[j].properties.adcode));
+                    }
+                }
+                return {adcode: null, done: false, nextCodes: nextCodes};
+            });
+        }
+
+        function getBoundary(city) {
+            if (currentLayer) {
+                map.removeLayer(currentLayer);
+            }
+            document.getElementById('result').innerHTML = '搜索中...';
+
+            fetchJSON('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')
+                .then(function(data) {
+                    if (!data) throw new Error('获取国家级数据失败');
+                    var found = findInFeatures(data.features, city);
+                    if (found) return found;
+                    var codes = data.features.map(function(f) { return String(f.properties.adcode); });
+                    return searchLevel(codes, city).then(function(r) {
+                        if (r.done) return r.adcode;
+                        return searchLevel(r.nextCodes, city).then(function(r2) {
+                            if (r2.done) return r2.adcode;
+                            return null;
+                        });
+                    });
+                })
+                .then(function(adcode) {
+                    if (!adcode) {
+                        document.getElementById('result').innerHTML = '';
+                        alert('未能获取当前输入行政区域: ' + city);
+                        return;
+                    }
+                    return fetchJSON('https://geo.datav.aliyun.com/areas_v3/bound/' + adcode + '.json');
+                })
+                .then(function(data) {
+                    if (!data) return;
+                    currentLayer = L.geoJSON(data, {
+                        style: {weight: 2, color: '#ff0000', fillOpacity: 0.1}
+                    }).addTo(map);
+
+                    var pathStr = '';
+                    var pathMc = '';
+                    var coords = [];
+                    var geometry = data.features ? data.features[0].geometry : data.geometry;
+                    if (geometry.type === 'Polygon') {
+                        coords = geometry.coordinates[0];
+                    } else if (geometry.type === 'MultiPolygon') {
+                        coords = geometry.coordinates[0][0];
+                    }
+                    for (var i = 0; i < coords.length; i++) {
+                        var lng = coords[i][0];
+                        var lat = coords[i][1];
+                        pathStr += lng + ',' + lat + ';';
+                        var mc = lngLatToMercator(lng, lat);
+                        pathMc += mc.x + ',' + mc.y + ';';
+                    }
+                    document.getElementById('pathStr').value = pathStr;
+                    document.getElementById('pathMc').value = pathMc;
+
+                    var bounds = currentLayer.getBounds();
+                    var sw = bounds.getSouthWest();
+                    var ne = bounds.getNorthEast();
+                    var swMc = lngLatToMercator(sw.lng, sw.lat);
+                    var neMc = lngLatToMercator(ne.lng, ne.lat);
+                    var str = '经纬度:左下角,右上角：' + sw.lng.toFixed(6) + ',' + sw.lat.toFixed(6) + ';' + ne.lng.toFixed(6) + ',' + ne.lat.toFixed(6)
+                        + '<br/>墨卡托坐标:左下角,右上角：' + swMc.x + ',' + swMc.y + ';' + neMc.x + ',' + neMc.y;
+                    document.getElementById('result').innerHTML = str;
+
+                    map.fitBounds(currentLayer.getBounds());
+                })
+                .catch(function(err) {
+                    document.getElementById('result').innerHTML = '';
+                    alert('获取边界数据失败: ' + err.message);
+                });
+        }
+
+        function lngLatToMercator(lng, lat) {
+            var x = lng * 20037508.34 / 180;
+            var y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+            y = y * 20037508.34 / 180;
+            return {x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100};
+        }
+    </script>
+</body>
+</html>
